@@ -3,8 +3,9 @@
 import { h } from '../ui/dom.js';
 import { money, monthLabel, monthName, dayLabel } from '../ui/format.js';
 import {
-  row, list, section, screenTitle, checkWarning, upOrShort, toneOf, empty,
+  row, list, section, screenTitle, checkWarning, upOrShort, toneOf, empty, showMeHow,
 } from '../ui/components.js';
+import { explainMonth } from '../insights/explain.js';
 import { historyMonths, monthSummary } from '../maths/budget.js';
 import { ymd, dayNumber, addMonths, compareMonths, parseMonthKey } from '../maths/dates.js';
 import { filterSwitch } from './shared.js';
@@ -18,7 +19,7 @@ function compareLine(now, before) {
   return `Same as ${name}`;
 }
 
-function totalsCard(s, label) {
+function totalsCard(s, label, withHow = false) {
   return h('div', { class: `card month-card ${toneOf(s.leftCents)}` },
     label && h('p', { class: 'month-card-title' }, label),
     s.ok
@@ -28,6 +29,7 @@ function totalsCard(s, label) {
           h('span', {}, h('small', {}, 'Out'), money(s.outCents)),
           h('span', { class: 'month-left' }, h('small', {}, 'Left'), money(s.leftCents))),
         h('p', { class: 'month-words' }, upOrShort(s.leftCents)),
+        withHow && showMeHow(() => explainMonth(s)),
       ]
       : checkWarning());
 }
@@ -58,7 +60,7 @@ export function monthView(y, m) {
 
       return h('div', { class: 'screen' },
         filterSwitch(ctx),
-        totalsCard(s, null),
+        totalsCard(s, null, true),
         compareLine(s, prev) && h('p', { class: 'muted center' }, compareLine(s, prev)),
         !s.items.length && empty('Nothing in this month.'),
         s.income.items.length > 0 && section('Money in', list(itemRows(ctx, s.income.items, thisYear))),

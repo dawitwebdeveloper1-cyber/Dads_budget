@@ -77,6 +77,29 @@ export function upOrShort(cents) {
   return 'You\'re even';
 }
 
+/** Turns the lines from js/insights/explain.js into a list. */
+export function howLines(lines) {
+  return h('ul', { class: 'how-lines' }, lines.map((l) => h('li', { class: `how-${l.kind}` }, l.text)));
+}
+
+/**
+ * A small "Show me how" button that opens the step-by-step working under it.
+ * `getLines` is only called when he opens it.
+ */
+export function showMeHow(getLines, label = 'Show me how') {
+  const box = h('div', { class: 'how-box', hidden: true });
+  const button = h('button', { type: 'button', class: 'how-btn', 'aria-expanded': 'false' }, label);
+  button.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const opening = box.hidden;
+    if (opening) box.replaceChildren(howLines(getLines()));
+    box.hidden = !opening;
+    button.textContent = opening ? 'Hide' : label;
+    button.setAttribute('aria-expanded', String(opening));
+  });
+  return h('div', { class: 'how' }, button, box);
+}
+
 export function toneOf(cents) {
   if (cents > 0) return 'up';
   if (cents < 0) return 'down';

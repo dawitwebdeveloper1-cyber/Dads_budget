@@ -3,8 +3,9 @@
 import { h } from '../ui/dom.js';
 import { money, howOften, monthName, dateLabel, plural } from '../ui/format.js';
 import {
-  row, list, section, screenTitle, checkWarning, segmented, barRow, empty, toneOf, upOrShort,
+  row, list, section, screenTitle, checkWarning, segmented, barRow, empty, toneOf, upOrShort, showMeHow,
 } from '../ui/components.js';
+import { explainBreakdown, explainGroup } from '../insights/explain.js';
 import { breakdown, groupOf, matchesFilter, normalizeName } from '../maths/budget.js';
 import { PERIODS, PERIOD_ORDER } from '../maths/periods.js';
 import { ymd, dayNumber } from '../maths/dates.js';
@@ -81,7 +82,8 @@ function groupView(groupKey, name) {
         !b.ok && checkWarning(),
         b.ok && g && h('div', { class: 'card total-card' },
           h('p', { class: 'hero-label' }, `Usual cost ${per(period)}`),
-          h('p', { class: 'total-amount' }, money(g.cents))),
+          h('p', { class: 'total-amount' }, money(g.cents)),
+          showMeHow(() => explainGroup(g, period))),
         b.ok && g && section('What\'s in it', list(lineRows(ctx, g.lines))),
         !g && empty('No regular costs in here right now.'),
         oneOffs.length > 0 && section('One-time costs',
@@ -115,7 +117,8 @@ export default {
           h('div', { class: 'summary-line' }, h('span', {}, `Money in ${per(period)}`), h('span', { class: 'up' }, money(b.inCents))),
           h('div', { class: 'summary-line' }, h('span', {}, `Money out ${per(period)}`), h('span', { class: 'down' }, money(b.outCents))),
           h('div', { class: `summary-line total ${toneOf(b.leftCents)}` }, h('span', {}, 'Left over'), h('span', {}, money(b.leftCents))),
-          h('p', { class: 'summary-words' }, upOrShort(b.leftCents).replace('You\'re', `Usually you're`))),
+          h('p', { class: 'summary-words' }, upOrShort(b.leftCents).replace('You\'re', `Usually you're`)),
+          showMeHow(() => explainBreakdown(b))),
       b.ok && b.groups.length > 0 && section('Where your money goes',
         h('div', { class: 'bars' }, b.groups.map((g) => barRow({
           name: g.name,

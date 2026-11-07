@@ -3,11 +3,13 @@
 import { h } from '../ui/dom.js';
 import { money, monthLabel, dayLabel, whenLabel, dateLabel } from '../ui/format.js';
 import {
-  row, list, section, checkWarning, upOrShort, toneOf, bigButton, empty,
+  row, list, section, checkWarning, upOrShort, toneOf, bigButton, empty, showMeHow,
 } from '../ui/components.js';
-import { monthSummary, carryOver, upcomingBills, groupOf } from '../maths/budget.js';
+import { monthSummary, carryOver, upcomingBills, groupOf, historyMonths } from '../maths/budget.js';
 import { ymd, dayNumber } from '../maths/dates.js';
 import { FREQUENCIES } from '../maths/schedule.js';
+import { explainMonth, explainCarry } from '../insights/explain.js';
+import { notesArea, markPaidWithUndo } from '../ui/notes.js';
 import { monthView } from './history.js';
 
 function welcomeCard(ctx) {
@@ -50,10 +52,15 @@ function heroCard(ctx, summary, carry) {
     summary.ok
       ? [h('p', { class: 'hero-amount' }, money(summary.leftCents)), h('p', { class: 'hero-words' }, upOrShort(summary.leftCents))]
       : checkWarning(),
+    summary.ok && showMeHow(() => explainMonth(summary)),
     allOk && carry.cents !== 0 && h('p', { class: 'hero-carry' },
       carry.cents > 0
         ? `Plus ${money(carry.cents)} carried over from earlier months = ${money(total)} in total.`
         : `Minus ${money(-carry.cents)} short from earlier months = ${money(total)} in total.`),
+    allOk && carry.cents !== 0 && showMeHow(() => {
+      const earlier = historyMonths(ctx.state, ctx.today).slice(1).reverse();
+      return explainCarry(earlier, summary.leftCents);
+    }, 'Show me how (carried over)'),
     summary.ok && !carry.ok && checkWarning());
 }
 
@@ -73,12 +80,19 @@ function comingUp(ctx) {
   if (!bills.length) return null;
   const thisYear = ymd(dayNumber(ctx.today)).y;
   return section('Coming up',
-    list(bills.map((b) => row({
-      title: b.entry.name,
-      sub: `${dayLabel(b.day, thisYear)} · ${whenLabel(b.daysAway)}`,
-      amount: money(b.entry.amountCents),
-      onClick: () => ctx.openForm({ entry: b.entry }),
-    }))));
+    list(bills.map((b) => h('div', { class: 'row bill-row' },
+      h('button', { type: 'button', class: 'bill-main tappable', onclick: () => ctx.openForm({ entry: b.entry }) },
+        h('span', { class: 'row-main' },
+          h('span', { class: 'row-title' }, b.entry.name),
+          h('span', { class: 'row-sub' }, `${dayLabel(b.day, thisYear)} · ${whenLabel(b.daysAway)}`)),
+        h('span', { class: 'row-amount' }, money(b.entry.amountCents))),
+      h('button', {
+        type: 'button',
+        class: 'paid-btn',
+        'aria-label': `Mark ${b.entry.name} paid`,
+        onclick: () => markPaidWithUndo(ctx, b.entry, b.iso),
+      }, 'Paid')))),
+    h('p', { class: 'muted small-note' }, 'Tap "Paid" when you\'ve paid one, and the next one shows instead.'));
 }
 
 function latest(ctx) {
@@ -112,6 +126,7 @@ export default {
       h('header', { class: 'screen-head' }, h('p', { class: 'screen-kicker' }, monthLabel(y, m))),
       welcomeCard(ctx),
       heroCard(ctx, summary, carry),
+      notesArea(ctx),
       tiles(ctx, summary),
       comingUp(ctx),
       latest(ctx),

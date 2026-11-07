@@ -1,11 +1,13 @@
 // More: categories and folders (settings, backup and the lock come in later stages).
 
 import { h, ask } from '../ui/dom.js';
-import { row, list, section, screenTitle, bigButton } from '../ui/components.js';
-import { plural } from '../ui/format.js';
+import { row, list, section, screenTitle, bigButton, empty } from '../ui/components.js';
+import { plural, howOften, dayLabel, dateLabel } from '../ui/format.js';
 import {
-  addCategory, renameCategory, deleteCategory, addFolder, renameFolder, deleteFolder, countIn,
+  addCategory, renameCategory, deleteCategory, addFolder, renameFolder, deleteFolder, countIn, setSetting,
 } from '../data/model.js';
+import { FREQUENCIES, activeRange, nextOccurrence } from '../maths/schedule.js';
+import { dayNumber, ymd } from '../maths/dates.js';
 import { OTHER_CATEGORY_ID } from '../maths/budget.js';
 
 async function askName(title, current, placeholder, message = null) {
@@ -57,6 +59,39 @@ async function manage(ctx, { kind, item }) {
   }
 }
 
+/** Every bill and paycheque that repeats, with when it's next due. */
+const regularView = {
+  title: 'Regular bills and pay',
+  render(ctx) {
+    const s = ctx.state;
+    const today = dayNumber(ctx.today);
+    const thisYear = ymd(today).y;
+    const all = s.entries.filter((e) => FREQUENCIES[e.freq].recurring);
+    const going = all.filter((e) => activeRange(e).hi >= today);
+    const stopped = all.filter((e) => activeRange(e).hi < today);
+    const rowFor = (e) => {
+      const next = nextOccurrence(e, today);
+      return row({
+        title: e.name,
+        sub: next !== null ? `${howOften(e)} · next ${dayLabel(next, thisYear)}` : howOften(e),
+        onClick: () => ctx.openForm({ entry: e }),
+      });
+    };
+    const ins = going.filter((e) => e.kind === 'in');
+    const outs = going.filter((e) => e.kind === 'out').sort((a, b) => b.amountCents - a.amountCents);
+    return h('div', { class: 'screen' },
+      h('p', { class: 'muted' }, 'These are added for you every time they come around. Tap one to change or stop it.'),
+      !all.length && empty('Nothing repeating yet. When you add something, pick "Every week", "Every month" and so on.'),
+      ins.length > 0 && section('Money in', list(ins.map(rowFor))),
+      outs.length > 0 && section('Money out', list(outs.map(rowFor))),
+      stopped.length > 0 && section('Stopped', list(stopped.map((e) => row({
+        title: e.name,
+        sub: `${howOften(e)} · stopped after ${dateLabel(e.endDate, thisYear)}`,
+        onClick: () => ctx.openForm({ entry: e }),
+      })))));
+  },
+};
+
 export default {
   id: 'more',
   label: 'More',
@@ -64,8 +99,26 @@ export default {
   title: 'More',
   render(ctx) {
     const s = ctx.state;
+    const notesOn = s.settings.notes !== false;
+    const repeating = s.entries.filter((e) => FREQUENCIES[e.freq].recurring).length;
     return h('div', { class: 'screen' },
       screenTitle('More'),
+      section(null, list([row({
+        title: 'Regular bills and pay',
+        sub: `${plural(repeating, 'item')} that repeat on their own`,
+        onClick: () => ctx.push(regularView),
+      })])),
+      section('Settings',
+        h('label', { class: 'switch-row' },
+          h('span', { class: 'row-main' },
+            h('span', { class: 'row-title' }, 'Helpful notes'),
+            h('span', { class: 'row-sub' }, 'Small tips on Home, like a bill coming up or spending more than usual.')),
+          h('input', {
+            type: 'checkbox',
+            class: 'switch',
+            checked: notesOn,
+            onchange: (e) => ctx.update((st) => setSetting(st, 'notes', e.target.checked)),
+          }))),
       section('Categories',
         list(s.categories.map((c) => row({
           title: c.name,

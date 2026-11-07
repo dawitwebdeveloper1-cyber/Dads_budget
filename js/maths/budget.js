@@ -4,9 +4,9 @@
 // warning instead of a number that might be wrong.
 
 import {
-  dayNumber, ymd, monthStartDay, monthEndDay, addMonths, compareMonths, parseMonthKey,
+  dayNumber, ymd, monthStartDay, monthEndDay, addMonths, compareMonths, parseMonthKey, isoDate,
 } from './dates.js';
-import { FREQUENCIES, occurrences, nextOccurrence, activeRange } from './schedule.js';
+import { FREQUENCIES, occurrences, activeRange } from './schedule.js';
 import { sum, roundDiv, allocateToTotal } from './money.js';
 import { PERIODS, periodTable, periodsAgree, yearlyCents } from './periods.js';
 
@@ -156,17 +156,40 @@ export function historyMonths(state, todayISO, filter = 'all') {
   return months.reverse();
 }
 
+/** Money out per category or folder between two days (inclusive), by real dates. */
+export function spendingBetween(state, from, to, filter = 'all') {
+  const totals = new Map();
+  const start = trackingStartDay(state);
+  if (start === null) return totals;
+  const lo = Math.max(from, start);
+  if (lo > to) return totals;
+  for (const entry of state.entries) {
+    if (entry.kind !== 'out' || !matchesFilter(entry, filter)) continue;
+    const n = occurrences(entry, lo, to).length;
+    if (!n) continue;
+    const group = groupOf(state, entry);
+    const t = totals.get(group.key) ?? { group, cents: 0 };
+    t.cents += entry.amountCents * n;
+    totals.set(group.key, t);
+  }
+  return totals;
+}
+
 // ---------------------------------------------------------------- upcoming bills
 
-/** The next few repeating bills from today on, soonest first. */
+/**
+ * The next few repeating bills from today on, soonest first. A bill he has
+ * already ticked as paid is skipped, so its next due date shows instead.
+ */
 export function upcomingBills(state, todayISO, count = 3) {
   const today = dayNumber(todayISO);
   const from = Math.max(today, trackingStartDay(state) ?? today);
+  const paid = state.paid ?? {};
   const found = [];
   for (const entry of state.entries) {
     if (entry.kind !== 'out' || !FREQUENCIES[entry.freq].recurring) continue;
-    const day = nextOccurrence(entry, from);
-    if (day !== null) found.push({ entry, day, daysAway: day - today });
+    const day = occurrences(entry, from, from + 800).find((d) => !paid[`${entry.id}|${isoDate(d)}`]);
+    if (day !== undefined) found.push({ entry, day, iso: isoDate(day), daysAway: day - today });
   }
   found.sort((a, b) => a.day - b.day || b.entry.amountCents - a.entry.amountCents);
   return found.slice(0, count);

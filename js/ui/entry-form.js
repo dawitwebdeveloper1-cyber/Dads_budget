@@ -1,7 +1,7 @@
 // The add / edit form: money in or out, amount, name, where it goes, how often.
 
 import { h, ask, openSheet } from './dom.js';
-import { money, monthLabel, howOften } from './format.js';
+import { money, monthLabel, howOften, dateLabel as dateText } from './format.js';
 import { parseAmount, centsToInput } from '../maths/money.js';
 import { FREQUENCIES, FREQUENCY_ORDER } from '../maths/schedule.js';
 import { normalizeName, trackingStartDay } from '../maths/budget.js';
@@ -114,12 +114,12 @@ export function openEntryForm(ctx, { entry = null, preset = {} } = {}) {
   function fillWhereOptions() {
     const s = ctx.state;
     whereSelect.replaceChildren(
-      h('option', { value: '' }, 'Pick one…'),
+      h('option', { value: '' }, 'Pick oneâ€¦'),
       h('optgroup', { label: 'Categories' }, s.categories.map((c) => h('option', { value: `c:${c.id}` }, c.name))),
-      s.folders.length > 0 && h('optgroup', { label: 'Folders' }, s.folders.map((f) => h('option', { value: `f:${f.id}` }, `📁 ${f.name}`))),
+      s.folders.length > 0 && h('optgroup', { label: 'Folders' }, s.folders.map((f) => h('option', { value: `f:${f.id}` }, `ðŸ“ ${f.name}`))),
       h('optgroup', { label: 'Add new' },
-        h('option', { value: 'new:cat' }, '+ New category…'),
-        h('option', { value: 'new:folder' }, '+ New folder…')));
+        h('option', { value: 'new:cat' }, '+ New categoryâ€¦'),
+        h('option', { value: 'new:folder' }, '+ New folderâ€¦')));
     whereSelect.value = d.where;
     if (whereSelect.value !== d.where) d.where = '';
   }
@@ -293,6 +293,13 @@ export function openEntryForm(ctx, { entry = null, preset = {} } = {}) {
       if (!value) return;
     }
 
+    const { value: confirmed } = await ask({
+      title: editing ? 'Save these changes?' : 'Save this?',
+      message: confirmCard(draft),
+      buttons: [{ label: 'Confirm', value: true, kind: 'primary' }, { label: 'Edit', value: false }],
+    });
+    if (!confirmed) return;
+
     try {
       ctx.update((s) => (editing ? editEntry(s, entry.id, draft, today, mode) : addEntry(s, draft, today)));
     } catch (err) {
@@ -301,6 +308,31 @@ export function openEntryForm(ctx, { entry = null, preset = {} } = {}) {
     }
     sheet.close();
     ctx.toast(mode === 'fromThisMonth' ? 'Saved. Earlier months keep the old details.' : 'Saved');
+  }
+
+  /** The big, easy-to-read summary shown before saving, so a typo stands out. */
+  function confirmCard(draft) {
+    const f = FREQUENCIES[draft.freq];
+    const s = ctx.state;
+    const where = draft.kind === 'in'
+      ? 'Money in'
+      : draft.folderId
+        ? `ðŸ“ ${s.folders.find((x) => x.id === draft.folderId)?.name ?? ''}`
+        : s.categories.find((c) => c.id === draft.categoryId)?.name ?? '';
+    const when = f.recurring ? `Starting from ${dateText(draft.startDate)}` : dateText(draft.startDate);
+    const changedAmount = editing && entry.amountCents !== draft.amountCents;
+    return h('div', { class: 'confirm' },
+      h('p', { class: `confirm-amount ${draft.kind === 'in' ? 'up' : 'down'}` }, money(draft.amountCents)),
+      changedAmount && h('p', { class: 'confirm-was' }, `Was ${money(entry.amountCents)}`),
+      h('p', { class: 'confirm-sentence' }, f.recurring
+        ? `Save ${money(draft.amountCents)} for ${draft.name.trim()}, ${f.short}?`
+        : `Save ${money(draft.amountCents)} for ${draft.name.trim()} on ${dateText(draft.startDate)}?`),
+      h('dl', { class: 'confirm-details' },
+        h('dt', {}, 'Name'), h('dd', {}, draft.name.trim()),
+        h('dt', {}, draft.kind === 'in' ? 'Type' : 'Goes in'), h('dd', {}, where),
+        h('dt', {}, 'How often'), h('dd', {}, f.label),
+        h('dt', {}, 'When'), h('dd', {}, when),
+        draft.tag === 'business' && [h('dt', {}, 'For'), h('dd', {}, 'Business')]));
   }
 
   async function cancel() {

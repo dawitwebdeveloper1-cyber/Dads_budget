@@ -4,9 +4,15 @@ A simple budgeting app for Dad. He types money coming in and going out, and
 the app tells him where he stands. It works offline, keeps everything on his
 phone, and installs on the iPhone home screen like a normal app.
 
-**Stage 1 of 3 is built:** adding, editing and deleting entries; categories and
-folders; the Home, Breakdown and History screens; and all the "no maths
-mistakes" rules, with automated tests.
+**Stages 1 and 2 of 3 are built:**
+
+- Stage 1: adding, editing and deleting entries; categories and folders; the
+  Home, Breakdown and History screens; all the "no maths mistakes" rules, with
+  automated tests.
+- Stage 2: "Paid" ticks on upcoming bills (with Undo); a confirm card before
+  every save; "Show me how" on every total; gentle notes (going short, a bill
+  due soon, spending more or less than last month), which can be swiped away
+  or turned off; and a list of all regular bills and pay under More.
 
 ---
 

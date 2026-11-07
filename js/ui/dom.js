@@ -96,11 +96,18 @@ export function openSheet({ title, onCancel, body }) {
 }
 
 let toastTimer = null;
-export function toast(text) {
+/** A short message near the bottom. Pass `action` ({ label, onClick }) to add a button like "Undo". */
+export function toast(text, action = null) {
   const root = overlayRoot();
   root.querySelector('.toast')?.remove();
-  const el = h('div', { class: 'toast', role: 'status' }, text);
+  const el = h('div', { class: `toast${action ? ' with-action' : ''}`, role: 'status' },
+    h('span', {}, text),
+    action && h('button', {
+      type: 'button',
+      class: 'toast-action',
+      onclick: () => { el.remove(); action.onClick(); },
+    }, action.label));
   root.append(el);
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.remove(), 2600);
+  toastTimer = setTimeout(() => el.remove(), action ? 6000 : 2600);
 }

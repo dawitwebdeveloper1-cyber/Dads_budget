@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import {
   newState, addEntry, editEntry, editAffectsPast, stopEntry, deleteEntry, hasPastMonths, dateTooEarly,
   addCategory, renameCategory, deleteCategory, addFolder, renameFolder, deleteFolder, loadState,
+  markPaid, unmarkPaid, isPaid,
 } from '../js/data/model.js';
-import { monthSummary, carryOver, breakdown } from '../js/maths/budget.js';
+import { monthSummary, carryOver, breakdown, upcomingBills } from '../js/maths/budget.js';
 import { buildState, pay, bill } from './helpers.js';
 
 test('a new budget starts with the default categories', () => {
@@ -114,6 +115,29 @@ test('folders hold their own expenses and show as one total', () => {
   const after = monthSummary(s, 2026, 1);
   assert.equal(after.outCents, jan.outCents);
   assert.deepEqual(after.groups.map((g) => g.name), ['Other', 'Sarah (school)']);
+});
+
+test('bills can be ticked off as paid, and the next one shows', () => {
+  let s = buildState([bill('Phone bill', 8500, 'monthly', '2026-01-15', 'cat-bills', { id: 'ph' })]);
+  assert.equal(upcomingBills(s, '2026-01-10')[0].iso, '2026-01-15');
+  s = markPaid(s, 'ph', '2026-01-15');
+  assert.equal(isPaid(s, 'ph', '2026-01-15'), true);
+  assert.equal(upcomingBills(s, '2026-01-10')[0].iso, '2026-02-15');
+  // Paying doesn't change the money totals.
+  assert.equal(monthSummary(s, 2026, 1).outCents, 8500);
+  s = unmarkPaid(s, 'ph', '2026-01-15');
+  assert.equal(upcomingBills(s, '2026-01-10')[0].iso, '2026-01-15');
+  assert.throws(() => markPaid(s, 'nope', '2026-01-15'));
+  s = deleteEntry(markPaid(s, 'ph', '2026-01-15'), 'ph');
+  assert.deepEqual(s.paid, {});
+});
+
+test('saved data from before Stage 2 still opens', () => {
+  const s = buildState([pay(200000, '2026-01-02')]);
+  const { paid, ...old } = JSON.parse(JSON.stringify(s));
+  assert.deepEqual(loadState(old).paid, {});
+  const ticked = loadState({ ...old, paid: { 'e1|2026-01-02': true, junk: true, 'e1|2026-02-31': true } });
+  assert.deepEqual(ticked.paid, { 'e1|2026-01-02': true });
 });
 
 test('saved data is checked before it is trusted', () => {

@@ -28,6 +28,7 @@ export function newState() {
     entries: [],
     categories: DEFAULT_CATEGORIES.map((c) => ({ ...c })),
     folders: [],
+    paid: {},
     settings: {},
   };
 }
@@ -159,7 +160,43 @@ export function stopEntry(state, id, todayISO) {
 }
 
 export function deleteEntry(state, id) {
-  return { ...state, entries: state.entries.filter((e) => e.id !== id) };
+  const paid = Object.fromEntries(Object.entries(state.paid ?? {}).filter(([key]) => !key.startsWith(`${id}|`)));
+  return { ...state, paid, entries: state.entries.filter((e) => e.id !== id) };
+}
+
+// ------------------------------------------------------------ bills ticked off as paid
+
+export const paidKey = (entryId, iso) => `${entryId}|${iso}`;
+
+export function isPaid(state, entryId, iso) {
+  return Boolean(state.paid?.[paidKey(entryId, iso)]);
+}
+
+/** Tick one bill off as paid. This is only a reminder tick; it doesn't change any totals. */
+export function markPaid(state, entryId, iso) {
+  if (!state.entries.some((e) => e.id === entryId)) throw new Error('That bill no longer exists.');
+  if (!isValidDate(iso)) throw new Error('Not a valid date.');
+  return { ...state, paid: { ...state.paid, [paidKey(entryId, iso)]: true } };
+}
+
+export function unmarkPaid(state, entryId, iso) {
+  const paid = { ...state.paid };
+  delete paid[paidKey(entryId, iso)];
+  return { ...state, paid };
+}
+
+// ------------------------------------------------------------ settings and notes
+
+export function setSetting(state, key, value) {
+  return { ...state, settings: { ...state.settings, [key]: value } };
+}
+
+/** Hide a note. Old hidden notes are forgotten after about two months. */
+export function dismissNote(state, noteId, todayISO) {
+  const today = dayNumber(todayISO);
+  const kept = Object.entries(state.settings.dismissed ?? {})
+    .filter(([, iso]) => isValidDate(iso) && today - dayNumber(iso) <= 62);
+  return setSetting(state, 'dismissed', { ...Object.fromEntries(kept), [noteId]: todayISO });
 }
 
 /** Has this repeating entry already counted in an earlier month? */
@@ -242,7 +279,14 @@ export function loadState(raw) {
     folders: Array.isArray(raw.folders) ? raw.folders.filter((f) => f && f.id && f.name) : [],
     settings: raw.settings && typeof raw.settings === 'object' ? raw.settings : {},
     entries: [],
+    paid: {},
   };
+  if (raw.paid && typeof raw.paid === 'object') {
+    for (const [key, value] of Object.entries(raw.paid)) {
+      const [, iso] = key.split('|');
+      if (value === true && isValidDate(iso)) state.paid[key] = true;
+    }
+  }
   if (!state.categories.some((c) => c.id === OTHER_CATEGORY_ID)) {
     state.categories.push({ id: OTHER_CATEGORY_ID, name: 'Other' });
   }
