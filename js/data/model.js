@@ -29,6 +29,8 @@ export function newState() {
     categories: DEFAULT_CATEGORIES.map((c) => ({ ...c })),
     folders: [],
     paid: {},
+    limits: {},
+    goals: [],
     settings: {},
   };
 }
@@ -233,7 +235,7 @@ export function renameCategory(state, id, name) {
 export function deleteCategory(state, id) {
   if (id === OTHER_CATEGORY_ID) throw new Error('"Other" can\'t be deleted. It catches anything without a category.');
   return {
-    ...state,
+    ...withoutLimit(state, `c:${id}`),
     categories: state.categories.filter((c) => c.id !== id),
     entries: state.entries.map((e) => (e.categoryId === id ? { ...e, categoryId: OTHER_CATEGORY_ID } : e)),
   };
@@ -252,7 +254,7 @@ export function renameFolder(state, id, name) {
 /** Delete a folder. Anything in it moves to "Other", so no money disappears. */
 export function deleteFolder(state, id) {
   return {
-    ...state,
+    ...withoutLimit(state, `f:${id}`),
     folders: state.folders.filter((f) => f.id !== id),
     entries: state.entries.map((e) => (e.folderId === id ? { ...e, folderId: null, categoryId: OTHER_CATEGORY_ID } : e)),
   };
@@ -260,6 +262,84 @@ export function deleteFolder(state, id) {
 
 export function countIn(state, { categoryId, folderId }) {
   return state.entries.filter((e) => (folderId ? e.folderId === folderId : !e.folderId && e.kind === 'out' && e.categoryId === categoryId)).length;
+}
+
+// ------------------------------------------------------------ spending limits
+
+function groupExists(state, key) {
+  if (key.startsWith('c:')) return state.categories.some((c) => c.id === key.slice(2));
+  if (key.startsWith('f:')) return state.folders.some((f) => f.id === key.slice(2));
+  return false;
+}
+
+function withoutLimit(state, key) {
+  const limits = { ...(state.limits ?? {}) };
+  delete limits[key];
+  return { ...state, limits };
+}
+
+/** Set a monthly limit for a category ("c:id") or folder ("f:id"). Pass null to remove it. */
+export function setLimit(state, key, cents) {
+  if (cents === null) return withoutLimit(state, key);
+  if (!groupExists(state, key)) throw new Error('That category or folder no longer exists.');
+  if (!Number.isSafeInteger(cents) || cents <= 0 || cents > MAX_CENTS) throw new Error('Please check the limit amount.');
+  return { ...state, limits: { ...(state.limits ?? {}), [key]: cents } };
+}
+
+// ------------------------------------------------------------ savings goals
+
+function checkGoal(state, goal, id) {
+  const name = String(goal.name ?? '').trim().replace(/\s+/g, ' ');
+  if (!name) throw new Error('Please give the goal a name, like "Truck repairs".');
+  if (name.length > 40) throw new Error('That name is a bit long. Please keep it under 40 letters.');
+  if ((state.goals ?? []).some((g) => g.id !== id && normalizeName(g.name) === normalizeName(name))) {
+    throw new Error(`There's already a goal called "${name}".`);
+  }
+  if (!Number.isSafeInteger(goal.targetCents) || goal.targetCents <= 0 || goal.targetCents > MAX_CENTS) {
+    throw new Error('Please check the goal amount.');
+  }
+  if (goal.byDate && !isValidDate(goal.byDate)) throw new Error('Please check the date.');
+  return name;
+}
+
+export function addGoal(state, { name, targetCents, byDate = null }, todayISO, id = makeId('goal')) {
+  const clean = checkGoal(state, { name, targetCents, byDate }, null);
+  if (byDate && dayNumber(byDate) <= dayNumber(todayISO)) throw new Error('Please pick a date after today.');
+  const goal = { id, name: clean, targetCents, byDate: byDate || null, createdAt: todayISO, deposits: [] };
+  return { ...state, goals: [...(state.goals ?? []), goal] };
+}
+
+export function editGoal(state, id, changes) {
+  const old = (state.goals ?? []).find((g) => g.id === id);
+  if (!old) throw new Error('That goal no longer exists.');
+  const next = { ...old, ...changes };
+  next.name = checkGoal(state, next, id);
+  next.byDate = next.byDate || null;
+  return { ...state, goals: state.goals.map((g) => (g.id === id ? next : g)) };
+}
+
+export function deleteGoal(state, id) {
+  return { ...state, goals: (state.goals ?? []).filter((g) => g.id !== id) };
+}
+
+/** Put money toward a goal. This doesn't change the monthly numbers. */
+export function addToGoal(state, goalId, cents, todayISO, depositId = makeId('dep')) {
+  if (!Number.isSafeInteger(cents) || cents <= 0 || cents > MAX_CENTS) throw new Error('Please check the amount.');
+  const goal = (state.goals ?? []).find((g) => g.id === goalId);
+  if (!goal) throw new Error('That goal no longer exists.');
+  const deposits = [...goal.deposits, { id: depositId, date: todayISO, cents }];
+  return { ...state, goals: state.goals.map((g) => (g.id === goalId ? { ...g, deposits } : g)) };
+}
+
+export function removeDeposit(state, goalId, depositId) {
+  return {
+    ...state,
+    goals: (state.goals ?? []).map((g) => (g.id === goalId ? { ...g, deposits: g.deposits.filter((d) => d.id !== depositId) } : g)),
+  };
+}
+
+export function goalSaved(goal) {
+  return goal.deposits.reduce((total, d) => total + d.cents, 0);
 }
 
 // ------------------------------------------------------------ loading saved data
@@ -296,5 +376,27 @@ export function loadState(raw) {
     state.entries.push(cleanEntry(e));
   }
   if (state.entries.length && !state.startMonth) throw new Error('The start month is missing.');
+
+  if (raw.limits && typeof raw.limits === 'object') {
+    for (const [key, cents] of Object.entries(raw.limits)) {
+      if (groupExists(state, key) && Number.isSafeInteger(cents) && cents > 0 && cents <= MAX_CENTS) state.limits[key] = cents;
+    }
+  }
+  for (const g of Array.isArray(raw.goals) ? raw.goals : []) {
+    try {
+      const deposits = (Array.isArray(g.deposits) ? g.deposits : [])
+        .filter((d) => d && d.id && isValidDate(d.date) && Number.isSafeInteger(d.cents) && d.cents > 0);
+      const goal = {
+        id: String(g.id), name: g.name, targetCents: g.targetCents,
+        byDate: isValidDate(g.byDate) ? g.byDate : null,
+        createdAt: isValidDate(g.createdAt) ? g.createdAt : null,
+        deposits,
+      };
+      goal.name = checkGoal(state, goal, goal.id);
+      state.goals.push(goal);
+    } catch (err) {
+      throw new Error(`A savings goal called "${g?.name}" is damaged: ${err.message}`);
+    }
+  }
   return state;
 }

@@ -1,7 +1,8 @@
 // Building blocks shared by the screens.
 
-import { h, icon } from './dom.js';
+import { h, icon, ask } from './dom.js';
 import { money } from './format.js';
+import { parseAmount } from '../maths/money.js';
 
 /** A tappable line in a list: title and small text on the left, amount on the right. */
 export function row({ title, sub = null, amount = null, tone = '', onClick = null, lead = null }) {
@@ -75,6 +76,23 @@ export function upOrShort(cents) {
   if (cents > 0) return `You're up ${money(cents)}`;
   if (cents < 0) return `You're short ${money(-cents)}`;
   return 'You\'re even';
+}
+
+/**
+ * Ask for an amount in a pop-up. Keeps asking until it's a good amount.
+ * Resolves { value, cents } where value is the button tapped (null if cancelled).
+ */
+export async function askAmount({ title, message = null, current = '', buttons }) {
+  let note = message;
+  let text = current;
+  for (;;) {
+    const answer = await ask({ title, message: note, input: { value: text, placeholder: '0.00', inputmode: 'decimal' }, buttons });
+    if (!answer.value || answer.value === 'remove') return { value: answer.value, cents: null };
+    const parsed = parseAmount(answer.text);
+    if (parsed.ok) return { value: answer.value, cents: parsed.cents };
+    note = parsed.message;
+    text = answer.text;
+  }
 }
 
 /** Turns the lines from js/insights/explain.js into a list. */

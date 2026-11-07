@@ -1,8 +1,11 @@
-// More: categories and folders (settings, backup and the lock come in later stages).
+// More: goals, limits, export, backup, the lock, settings, categories and folders.
 
 import { h, ask } from '../ui/dom.js';
 import { row, list, section, screenTitle, bigButton, empty } from '../ui/components.js';
 import { plural, howOften, dayLabel, dateLabel } from '../ui/format.js';
+import { goalsView, limitsView, exportView } from './tools.js';
+import { backUpNow, restoreBackup } from '../ui/backup-actions.js';
+import { lockEnabled, setUpLock, turnOffLock, changeLock } from '../ui/lock.js';
 import {
   addCategory, renameCategory, deleteCategory, addFolder, renameFolder, deleteFolder, countIn, setSetting,
 } from '../data/model.js';
@@ -22,8 +25,7 @@ async function askName(title, current, placeholder, message = null) {
 
 async function tryChange(ctx, change, done) {
   try {
-    ctx.update(change);
-    if (done) ctx.toast(done);
+    ctx.change(change, done);
   } catch (err) {
     await ask({ title: 'Can\'t do that', message: err.message });
   }
@@ -103,11 +105,41 @@ export default {
     const repeating = s.entries.filter((e) => FREQUENCIES[e.freq].recurring).length;
     return h('div', { class: 'screen' },
       screenTitle('More'),
-      section(null, list([row({
-        title: 'Regular bills and pay',
-        sub: `${plural(repeating, 'item')} that repeat on their own`,
-        onClick: () => ctx.push(regularView),
-      })])),
+      section(null, list([
+        row({
+          title: 'Regular bills and pay',
+          sub: `${plural(repeating, 'item')} that repeat on their own`,
+          onClick: () => ctx.push(regularView),
+        }),
+        row({
+          title: 'Savings goals',
+          sub: (s.goals ?? []).length ? plural(s.goals.length, 'goal') : 'Save up for something',
+          onClick: () => ctx.push(goalsView),
+        }),
+        row({
+          title: 'Spending limits',
+          sub: Object.keys(s.limits ?? {}).length ? plural(Object.keys(s.limits).length, 'limit') : 'Set a monthly limit, like $600 for food',
+          onClick: () => ctx.push(limitsView),
+        }),
+        row({
+          title: 'Export for taxes',
+          sub: 'Spreadsheet or PDF of any month or year',
+          onClick: () => ctx.push(exportView),
+        }),
+      ])),
+      section('Backup',
+        h('p', { class: 'muted' }, s.settings.lastBackup
+          ? `Last backup: ${dateLabel(s.settings.lastBackup)}. Save the file somewhere safe, like Files or iCloud Drive.`
+          : 'No backup yet. A backup is one small file. Save it somewhere safe, like Files or iCloud Drive, so nothing is lost if you change phones.'),
+        bigButton('Export backup', () => backUpNow(ctx)),
+        bigButton('Import backup', () => restoreBackup(ctx), 'secondary')),
+      section('Passcode lock',
+        h('p', { class: 'muted' }, lockEnabled(s)
+          ? 'On. The app asks for your 4-number passcode when it opens.'
+          : 'Off. Turn it on so nobody else can open the app on this phone.'),
+        lockEnabled(s)
+          ? [bigButton('Change passcode', () => changeLock(ctx), 'secondary'), bigButton('Turn lock off', () => turnOffLock(ctx), 'plain')]
+          : bigButton('Turn on passcode lock', () => setUpLock(ctx), 'secondary')),
       section('Settings',
         h('label', { class: 'switch-row' },
           h('span', { class: 'row-main' },
@@ -141,6 +173,6 @@ export default {
           if (name !== null) await tryChange(ctx, (st) => addFolder(st, name), 'Folder added');
         }, 'secondary')),
       section('Your data',
-        h('p', { class: 'muted' }, 'Everything is saved on this phone only. Nothing is sent anywhere. Backup buttons are coming in a later update.')));
+        h('p', { class: 'muted' }, 'Everything is saved on this phone only. Nothing is sent anywhere. Deleting the app from your home screen deletes its data, so keep a backup.')));
   },
 };

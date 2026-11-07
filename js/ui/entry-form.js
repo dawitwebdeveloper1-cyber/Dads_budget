@@ -6,6 +6,7 @@ import { parseAmount, centsToInput } from '../maths/money.js';
 import { FREQUENCIES, FREQUENCY_ORDER } from '../maths/schedule.js';
 import { normalizeName, trackingStartDay } from '../maths/budget.js';
 import { unusualAmount, findDuplicate } from '../maths/checks.js';
+import { favourites } from '../insights/favourites.js';
 import { ymd, dayNumber, isValidDate } from '../maths/dates.js';
 import {
   addEntry, editEntry, editAffectsPast, deleteEntry, stopEntry, hasPastMonths, dateTooEarly,
@@ -86,7 +87,32 @@ export function openEntryForm(ctx, { entry = null, preset = {} } = {}) {
   const saveButton = h('button', { type: 'button', class: 'btn btn-primary btn-save' }, 'Save');
   const deleteButton = editing ? h('button', { type: 'button', class: 'btn btn-danger-plain' }, 'Delete') : null;
 
+  // Quick-add: one tap fills in something he enters often, ready for the new amount.
+  const quick = editing ? [] : favourites(ctx.state, today);
+  const quickAdd = quick.length > 0 && h('div', { class: 'quick-add' },
+    h('span', { class: 'label' }, 'Quick add'),
+    h('div', { class: 'quick-list' }, quick.map((f) => h('button', {
+      type: 'button',
+      class: 'quick-btn',
+      onclick: () => {
+        Object.assign(d, { kind: f.kind, name: f.name, where: f.where, freq: f.freq, tag: f.tag, date: today });
+        freqTouched = true;
+        dirty = true;
+        nameInput.value = f.name;
+        dateInput.value = today;
+        amountInput.value = centsToInput(f.amountCents);
+        for (const el of [amountError, nameError, whereError, dateError]) el.textContent = '';
+        fillWhereOptions();
+        fillNames();
+        refresh();
+        amountInput.focus();
+        amountInput.select();
+      },
+    }, h('span', { class: 'quick-name' }, f.name), h('span', { class: 'quick-amount' }, `last ${money(f.amountCents)}`)))),
+    h('p', { class: 'hint' }, 'Tap one, change the amount if needed, then Save.'));
+
   const body = h('form', { class: 'entry-form', novalidate: true, onsubmit: (e) => { e.preventDefault(); save(); } },
+    quickAdd,
     h('div', { class: 'kind-toggle', role: 'radiogroup', 'aria-label': 'Money in or money out' }, kindButtons.in, kindButtons.out),
     h('div', { class: 'field' },
       h('label', { class: 'label', for: 'f-amount' }, 'How much?'),
@@ -301,13 +327,15 @@ export function openEntryForm(ctx, { entry = null, preset = {} } = {}) {
     if (!confirmed) return;
 
     try {
-      ctx.update((s) => (editing ? editEntry(s, entry.id, draft, today, mode) : addEntry(s, draft, today)));
+      ctx.change(
+        (s) => (editing ? editEntry(s, entry.id, draft, today, mode) : addEntry(s, draft, today)),
+        mode === 'fromThisMonth' ? 'Saved. Earlier months keep the old details.' : 'Saved',
+      );
     } catch (err) {
       await ask({ title: 'Not saved', message: err.message });
       return;
     }
     sheet.close();
-    ctx.toast(mode === 'fromThisMonth' ? 'Saved. Earlier months keep the old details.' : 'Saved');
   }
 
   /** The big, easy-to-read summary shown before saving, so a typo stands out. */
@@ -362,9 +390,11 @@ export function openEntryForm(ctx, { entry = null, preset = {} } = {}) {
         ],
       });
       if (!value) return;
-      ctx.update((st) => (value === 'stop' ? stopEntry(st, current.id, today) : deleteEntry(st, current.id)));
+      ctx.change(
+        (st) => (value === 'stop' ? stopEntry(st, current.id, today) : deleteEntry(st, current.id)),
+        value === 'stop' ? `${current.name} stops after this month` : 'Deleted',
+      );
       sheet.close();
-      ctx.toast(value === 'stop' ? `${current.name} stops after this month` : 'Deleted');
       return;
     }
     const { value } = await ask({
@@ -373,9 +403,8 @@ export function openEntryForm(ctx, { entry = null, preset = {} } = {}) {
       buttons: [{ label: 'Delete', value: true, kind: 'danger' }, { label: 'Cancel', value: false }],
     });
     if (!value) return;
-    ctx.update((st) => deleteEntry(st, current.id));
+    ctx.change((st) => deleteEntry(st, current.id), 'Deleted');
     sheet.close();
-    ctx.toast('Deleted');
   }
 
   saveButton.addEventListener('click', save);

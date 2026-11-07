@@ -5,6 +5,7 @@ import { TABS } from './tabs.js';
 import * as store from './data/store.js';
 import { h, icon, toast, ask } from './ui/dom.js';
 import { openEntryForm } from './ui/entry-form.js';
+import { lockEnabled, unlock, LOCK_AFTER_MS } from './ui/lock.js';
 import { todayISO } from './maths/dates.js';
 
 const ui = {
@@ -18,6 +19,23 @@ const ctx = {
   get today() { return todayISO(); },
   prefs: { period: 'month', filter: 'all' },
   update: store.update,
+  /**
+   * Make a change and offer "Undo" for a few seconds. Undo puts everything
+   * back exactly as it was, as long as nothing else has changed since.
+   */
+  change(fn, message) {
+    const before = store.getState();
+    const after = store.update(fn);
+    if (after === before) return;
+    toast(message, {
+      label: 'Undo',
+      onClick: () => {
+        if (store.getState() !== after) { toast('Can\'t undo that now'); return; }
+        store.update(() => before);
+        toast('Undone');
+      },
+    });
+  },
   toast,
   render: () => render(false),
   push(view) {
@@ -81,19 +99,46 @@ function render(toTop = false, restore = false) {
   window.scrollTo(0, y);
 }
 
+// ---- passcode lock: asked on opening, and again after a minute away.
+let hiddenAt = null;
+let locking = false;
+
+async function lockNow() {
+  if (locking || !lockEnabled(store.getState())) return;
+  locking = true;
+  document.body.classList.add('locked');
+  await unlock(ctx);
+  document.body.classList.remove('locked');
+  locking = false;
+  render();
+}
+
+function onVisibility() {
+  if (document.hidden) {
+    hiddenAt = Date.now();
+    // Hide the numbers from the app switcher picture while away.
+    if (lockEnabled(store.getState())) document.body.classList.add('privacy');
+    return;
+  }
+  document.body.classList.remove('privacy');
+  if (hiddenAt !== null && Date.now() - hiddenAt >= LOCK_AFTER_MS) lockNow();
+  hiddenAt = null;
+  render(); // the date may have changed
+}
+
 async function start() {
   const { loadProblem } = store.init();
   store.subscribe(() => render());
   document.getElementById('fab').addEventListener('click', () => ctx.openForm());
   render();
+  await lockNow();
   if (loadProblem) {
     await ask({
       title: 'Your saved data couldn\'t be opened',
       message: `A copy has been kept aside, and the app has started fresh. (${loadProblem})`,
     });
   }
-  // Redraw when he comes back to the app (the date may have changed).
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+  document.addEventListener('visibilitychange', onVisibility);
 
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('./sw.js').catch((err) => console.warn('Offline mode not available', err));

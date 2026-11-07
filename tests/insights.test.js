@@ -88,12 +88,15 @@ test('rough money rounds to whole dollars', () => {
   assert.equal(roughMoney(123456), '$1,235');
 });
 
-const shortMonth = () => buildState([
+// These budgets were 'just backed up', so the weekly backup note stays out of the way.
+const quiet = (s) => setSetting(s, 'lastBackup', '2026-11-08');
+
+const shortMonth = () => quiet(buildState([
   pay(100000, '2026-11-02', { freq: 'once', name: 'Pay' }),
   bill('Rent', 90000, 'once', '2026-11-03', 'cat-housing'),
   bill('Gas', 5000, 'varies', '2026-11-04', 'cat-gas'),
   bill('Gas', 5000, 'varies', '2026-11-09', 'cat-gas'),
-], { today: '2026-11-02' });
+], { today: '2026-11-02' }));
 
 test('"At this pace you\'ll be about $X short"', () => {
   // $1,000 in, $1,000 out so far. Gas is $100 after 10 days → about $300 for 30 days → $200 more.
@@ -105,12 +108,12 @@ test('"At this pace you\'ll be about $X short"', () => {
 
 test('no shortfall note early in the month or when things look fine', () => {
   assert.deepEqual(adviceNotes(shortMonth(), '2026-11-04').filter((n) => n.id.startsWith('short')), []);
-  const fine = buildState([pay(500000, '2026-11-02', { freq: 'once', name: 'Pay' }), bill('Gas', 5000, 'varies', '2026-11-04', 'cat-gas')], { today: '2026-11-02' });
+  const fine = quiet(buildState([pay(500000, '2026-11-02', { freq: 'once', name: 'Pay' }), bill('Gas', 5000, 'varies', '2026-11-04', 'cat-gas')], { today: '2026-11-02' }));
   assert.deepEqual(adviceNotes(fine, '2026-11-10'), []);
 });
 
 test('"Phone bill ($85.00) is due in 3 days", and gone once marked paid', () => {
-  let s = buildState([pay(500000, '2026-11-02', { freq: 'monthly' }), bill('Phone bill', 8500, 'monthly', '2026-11-13', 'cat-bills', { id: 'ph' })], { today: '2026-11-01' });
+  let s = quiet(buildState([pay(500000, '2026-11-02', { freq: 'monthly' }), bill('Phone bill', 8500, 'monthly', '2026-11-13', 'cat-bills', { id: 'ph' })], { today: '2026-11-01' }));
   const [note] = adviceNotes(s, '2026-11-10');
   assert.equal(note.text, 'Phone bill ($85.00) is due in 3 days.');
   assert.deepEqual(note.action, { type: 'paid', label: 'Mark paid', entryId: 'ph', iso: '2026-11-13' });
@@ -121,14 +124,14 @@ test('"Phone bill ($85.00) is due in 3 days", and gone once marked paid', () => 
   assert.deepEqual(adviceNotes(s, '2026-11-10'), []);
 });
 
-const twoMonths = () => buildState([
+const twoMonths = () => quiet(buildState([
   pay(500000, '2026-10-01', { freq: 'monthly' }),
   bill('Groceries', 10000, 'varies', '2026-10-03', 'cat-food'),
   bill('Groceries', 22000, 'varies', '2026-11-03', 'cat-food'),
   bill('Gas', 30000, 'varies', '2026-10-05', 'cat-gas'),
   bill('Gas', 10000, 'varies', '2026-11-05', 'cat-gas'),
   bill('Late gas', 99999, 'varies', '2026-10-25', 'cat-gas'), // after the 10th: not compared
-], { today: '2026-10-01' });
+], { today: '2026-10-01' }));
 
 test('"Food is $120 higher than last month" and "Nice, you spent $200 less"', () => {
   const notes = adviceNotes(twoMonths(), '2026-11-10');
@@ -158,9 +161,9 @@ test('notes can be swiped away, turned off, and never more than two show', () =>
   s = dismissNote(s, 'other', '2027-02-01');
   assert.deepEqual(Object.keys(s.settings.dismissed), ['other']);
   assert.deepEqual(adviceNotes(setSetting(twoMonths(), 'notes', false), '2026-11-10'), []);
-  const busy = buildState([
+  const busy = quiet(buildState([
     ...twoMonths().entries,
     bill('Phone bill', 8500, 'monthly', '2026-11-12', 'cat-bills'),
-  ].map(({ id, createdAt, ...e }) => e), { today: '2026-10-01' });
+  ].map(({ id, createdAt, ...e }) => e), { today: '2026-10-01' }));
   assert.equal(adviceNotes(busy, '2026-11-10').length, 2);
 });

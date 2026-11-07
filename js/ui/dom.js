@@ -53,8 +53,10 @@ export function ask({ title, message, buttons = [{ label: 'OK', value: true, kin
     let field = null;
     if (input) {
       field = h('input', {
-        class: 'input', type: 'text', value: input.value ?? '', placeholder: input.placeholder ?? '',
-        autocapitalize: 'words', enterkeyhint: 'done', 'aria-label': title,
+        class: `input${input.inputmode === 'decimal' ? ' amount-input dialog-amount' : ''}`,
+        type: 'text', value: input.value ?? '', placeholder: input.placeholder ?? '',
+        inputmode: input.inputmode ?? null,
+        autocapitalize: input.inputmode ? 'off' : 'words', enterkeyhint: 'done', 'aria-label': title,
       });
     }
     const done = (value) => {

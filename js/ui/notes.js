@@ -6,6 +6,8 @@ import { howLines } from './components.js';
 import { adviceNotes } from '../insights/advice.js';
 import { markPaid, unmarkPaid, dismissNote } from '../data/model.js';
 import { monthView } from '../screens/history.js';
+import { addMoneyToGoal } from '../screens/tools.js';
+import { backUpNow } from './backup-actions.js';
 
 /** Tick a bill off, with an Undo button in case it was the wrong one. */
 export function markPaidWithUndo(ctx, entry, iso) {
@@ -22,6 +24,11 @@ function runAction(ctx, action) {
     if (entry) markPaidWithUndo(ctx, entry, action.iso);
   } else if (action.type === 'month') {
     ctx.push(monthView(action.y, action.m));
+  } else if (action.type === 'goal') {
+    const goal = (ctx.state.goals ?? []).find((g) => g.id === action.goalId);
+    if (goal) addMoneyToGoal(ctx, goal);
+  } else if (action.type === 'backup') {
+    backUpNow(ctx);
   }
 }
 

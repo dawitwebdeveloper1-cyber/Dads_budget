@@ -4,7 +4,7 @@ A simple budgeting app for Dad. He types money coming in and going out, and
 the app tells him where he stands. It works offline, keeps everything on his
 phone, and installs on the iPhone home screen like a normal app.
 
-**Stages 1 and 2 of 3 are built:**
+**All 3 stages are built:**
 
 - Stage 1: adding, editing and deleting entries; categories and folders; the
   Home, Breakdown and History screens; all the "no maths mistakes" rules, with
@@ -13,6 +13,36 @@ phone, and installs on the iPhone home screen like a normal app.
   every save; "Show me how" on every total; gentle notes (going short, a bill
   due soon, spending more or less than last month), which can be swiped away
   or turned off; and a list of all regular bills and pay under More.
+- Stage 3: spending limits; savings goals; quick-add buttons for things he
+  enters often; Undo after every save, edit and delete; an optional passcode
+  lock; a month-end summary; export of any month or year to a spreadsheet (CSV)
+  or PDF, with personal-only or business-only options; backup export/import
+  with a weekly reminder.
+
+## Backups and changing phones
+
+- **Making a backup:** More → **Export backup**. On iPhone the Share sheet
+  opens; tap **Save to Files** and pick iCloud Drive. The file is called
+  something like `budget-backup-2026-11-06.json`. A note on Home reminds him
+  about once a week.
+- **On a new phone:** install the app (see below), open it, go to More →
+  **Import backup**, and pick the backup file. It shows the backup's date and
+  asks before replacing anything. A wrong or damaged file is refused and
+  nothing changes.
+
+## The passcode lock
+
+- Turn it on in More → **Passcode lock**. It asks for the 4 numbers when the app
+  opens, and again if he has been away from it for more than a minute.
+- Only a scrambled fingerprint of the passcode is saved, never the numbers.
+- **If he forgets it:** "Forgot passcode?" erases the data on that phone, and
+  he then loads his backup. That's on purpose: otherwise the lock wouldn't
+  keep anyone out. The backup includes the passcode, so after loading it the
+  old passcode works again.
+- **Why no Face ID:** I couldn't confirm it works reliably in an app saved to
+  the home screen, and it shows confusing "passkey" prompts. The lock keeps out
+  someone who picks up his phone. It isn't bank-level security; the phone's own
+  passcode is what protects the data on it.
 
 ---
 
@@ -110,8 +140,7 @@ You only do this once.
    there. It opens full-screen, with no Safari bars, and works without internet.
 
 **Important:** the app's data lives inside that home-screen icon. **Deleting the
-icon deletes his data.** The Export / Import backup buttons arrive in Stage 3;
-until then, treat Stage 1 as a test run.
+icon deletes his data.** Keep a backup (More → Export backup).
 
 ## Sending him an update later
 

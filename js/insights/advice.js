@@ -11,7 +11,10 @@ import {
   dayNumber, ymd, monthStartDay, daysInMonth, addMonths, compareMonths, parseMonthKey, monthKey,
 } from '../maths/dates.js';
 import { monthSummary, upcomingBills, spendingBetween } from '../maths/budget.js';
-import { monthName, dayLabel } from '../ui/format.js';
+import { monthName, dayLabel, plural } from '../ui/format.js';
+import { limitStatus } from './limits.js';
+import { goalPlan } from './goals.js';
+import { backupDue } from '../data/backup.js';
 
 export const MAX_NOTES = 2;
 
@@ -30,14 +33,101 @@ export function roughMoney(cents) {
 }
 
 export function adviceNotes(state, todayISO) {
-  if (state.settings?.notes === false) return [];
   const dismissed = state.settings?.dismissed ?? {};
+  // The backup reminder shows even with notes turned off, because losing data is worse.
+  if (state.settings?.notes === false) return backupNotes(state, todayISO).filter((n) => !dismissed[n.id]);
+  const limits = limitNotes(state, todayISO);
   const notes = [
     ...shortfallNotes(state, todayISO),
+    ...limits.filter((n) => n.tone === 'warn'),
     ...billNotes(state, todayISO),
+    ...backupNotes(state, todayISO),
+    ...limits.filter((n) => n.tone !== 'warn'),
+    ...goalNotes(state, todayISO),
     ...comparisonNotes(state, todayISO),
   ];
   return notes.filter((n) => !dismissed[n.id]).slice(0, MAX_NOTES);
+}
+
+const weekKey = (todayISO) => Math.floor(dayNumber(todayISO) / 7);
+
+/** "You've used 80% of your Gas budget with 10 days left." / "You've gone $40 over your Gas limit." */
+export function limitNotes(state, todayISO) {
+  const { y, m } = ymd(dayNumber(todayISO));
+  const notes = [];
+  for (const l of limitStatus(state, todayISO)) {
+    const why = [
+      line(`Limit for ${monthName(m)}: ${money(l.limitCents)}`),
+      line(`Spent so far: ${money(l.usedCents)} (${l.percent}%)`),
+      line(l.leftCents >= 0 ? `Left to spend: ${money(l.leftCents)}, with ${plural(l.daysLeft, 'day')} to go.` : `Over by: ${money(-l.leftCents)}`),
+    ];
+    if (l.usedCents > l.limitCents) {
+      notes.push({
+        id: `over:${l.key}:${monthKey(y, m)}`,
+        tone: 'warn',
+        text: `You've gone ${roughMoney(l.usedCents - l.limitCents)} over your ${l.name} limit this month.`,
+        why, action: null,
+      });
+    } else if (l.percent >= 80) {
+      notes.push({
+        id: `near:${l.key}:${monthKey(y, m)}`,
+        tone: 'info',
+        text: l.daysLeft > 0
+          ? `You've used ${l.percent}% of your ${l.name} budget with ${plural(l.daysLeft, 'day')} left.`
+          : `You've used ${l.percent}% of your ${l.name} budget this month.`,
+        why, action: null,
+      });
+    }
+  }
+  return notes;
+}
+
+/** "Put away $50 more this week to stay on track for your repair fund." */
+export function goalNotes(state, todayISO) {
+  const notes = [];
+  for (const goal of state.goals ?? []) {
+    const plan = goalPlan(goal, todayISO);
+    if (plan.done) {
+      notes.push({
+        id: `goaldone:${goal.id}`,
+        tone: 'good',
+        text: `Well done! You reached your ${goal.name} goal of ${roughMoney(goal.targetCents)}.`,
+        why: [line(`Saved: ${money(plan.saved)} of ${money(goal.targetCents)}.`)],
+        action: null,
+      });
+      continue;
+    }
+    if (plan.perWeek === null) continue;
+    const needMore = plan.perWeek - plan.lastWeekCents;
+    if (needMore < 500) continue;
+    notes.push({
+      id: `goal:${goal.id}:${weekKey(todayISO)}`,
+      tone: 'info',
+      text: `Put away ${roughMoney(Math.ceil(needMore / 100) * 100)} more this week to stay on track for ${goal.name}.`,
+      why: [
+        line(`${money(plan.remaining)} still to go, with ${plural(plan.weeksLeft, 'week')} left.`),
+        line(`${money(plan.remaining)} ÷ ${plan.weeksLeft} = ${money(plan.perWeek)} a week.`),
+        line(`Put away in the last 7 days: ${money(plan.lastWeekCents)}.`),
+      ],
+      action: { type: 'goal', label: 'Add money', goalId: goal.id },
+    });
+  }
+  return notes;
+}
+
+/** "Time to back up your data" — about once a week. */
+export function backupNotes(state, todayISO) {
+  if (!backupDue(state, todayISO)) return [];
+  const last = state.settings?.lastBackup;
+  return [{
+    id: `backup:${weekKey(todayISO)}`,
+    tone: 'info',
+    text: 'Time to back up your data.',
+    why: [line(last
+      ? `Your last backup was on ${dayLabel(dayNumber(last))}. A backup is one small file you can keep in Files or iCloud Drive, so nothing is lost if you change or lose your phone.`
+      : 'You haven\'t made a backup yet. A backup is one small file you can keep in Files or iCloud Drive, so nothing is lost if you change or lose your phone.')],
+    action: { type: 'backup', label: 'Back up now' },
+  }];
 }
 
 /** "At this pace you'll be about $150 short this month." */
