@@ -7,8 +7,8 @@
   --text: #17201c;
   --muted: #5b6863;
   --line: #e2e6e3;
-  --brand: #1a3263;
-  --brand-soft: #e1e7f2;
+  --brand: #0f1f45;
+  --brand-soft: #dfe4ef;
   --on-brand: #ffffff;
   --up: #17803d;
   --up-soft: #e6f4ea;
@@ -29,8 +29,8 @@
     --text: #edf2ef;
     --muted: #a3b1aa;
     --line: #2b3430;
-    --brand: #8aa8e6;
-    --brand-soft: #18223a;
+    --brand: #7d97d4;
+    --brand-soft: #151d33;
     --on-brand: #0a1430;
     --up: #4fd17e;
     --up-soft: #173222;
@@ -250,7 +250,7 @@ button { cursor: pointer; }
   bottom: calc(var(--tabbar) + 18px + env(safe-area-inset-bottom));
   width: 72px; height: 72px; border-radius: 50%;
   border: 0; background: var(--brand); color: var(--on-brand);
-  box-shadow: 0 6px 18px rgba(26, 50, 99, .4);
+  box-shadow: 0 6px 18px rgba(15, 31, 69, .45);
   display: grid; place-items: center;
 }
 .fab svg { width: 36px; height: 36px; }

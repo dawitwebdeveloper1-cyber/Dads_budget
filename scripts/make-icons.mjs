@@ -4,7 +4,7 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
 
-const BG = [26, 50, 99];
+const BG = [15, 31, 69];
 const FG = [255, 255, 255];
 
 function crc32(buf) {
