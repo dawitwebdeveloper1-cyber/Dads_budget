@@ -2,7 +2,7 @@
 // listed below. When you change the app, raise VERSION by one so phones pick
 // up the new copy the next time they open it with internet.
 
-const VERSION = 3;
+const VERSION = 4;
 const CACHE = `dads-budget-v${VERSION}`;
 
 const FILES = [

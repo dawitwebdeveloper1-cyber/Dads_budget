@@ -140,12 +140,12 @@ export function openEntryForm(ctx, { entry = null, preset = {} } = {}) {
   function fillWhereOptions() {
     const s = ctx.state;
     whereSelect.replaceChildren(
-      h('option', { value: '' }, 'Pick oneâ€¦'),
+      h('option', { value: '' }, 'Pick one…'),
       h('optgroup', { label: 'Categories' }, s.categories.map((c) => h('option', { value: `c:${c.id}` }, c.name))),
-      s.folders.length > 0 && h('optgroup', { label: 'Folders' }, s.folders.map((f) => h('option', { value: `f:${f.id}` }, `ðŸ“ ${f.name}`))),
+      s.folders.length > 0 && h('optgroup', { label: 'Folders' }, s.folders.map((f) => h('option', { value: `f:${f.id}` }, `📁 ${f.name}`))),
       h('optgroup', { label: 'Add new' },
-        h('option', { value: 'new:cat' }, '+ New categoryâ€¦'),
-        h('option', { value: 'new:folder' }, '+ New folderâ€¦')));
+        h('option', { value: 'new:cat' }, '+ New category…'),
+        h('option', { value: 'new:folder' }, '+ New folder…')));
     whereSelect.value = d.where;
     if (whereSelect.value !== d.where) d.where = '';
   }
@@ -345,7 +345,7 @@ export function openEntryForm(ctx, { entry = null, preset = {} } = {}) {
     const where = draft.kind === 'in'
       ? 'Money in'
       : draft.folderId
-        ? `ðŸ“ ${s.folders.find((x) => x.id === draft.folderId)?.name ?? ''}`
+        ? `📁 ${s.folders.find((x) => x.id === draft.folderId)?.name ?? ''}`
         : s.categories.find((c) => c.id === draft.categoryId)?.name ?? '';
     const when = f.recurring ? `Starting from ${dateText(draft.startDate)}` : dateText(draft.startDate);
     const changedAmount = editing && entry.amountCents !== draft.amountCents;
