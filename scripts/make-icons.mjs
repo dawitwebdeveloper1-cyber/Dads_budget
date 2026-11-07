@@ -1,10 +1,10 @@
-// Draws the app icon (a teal square with three rising white bars) as PNG
+// Draws the app icon (a navy square with three rising white bars) as PNG
 // files, using only what comes with Node. Run with: npm run icons
 
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
 
-const BG = [23, 97, 111];
+const BG = [26, 50, 99];
 const FG = [255, 255, 255];
 
 function crc32(buf) {

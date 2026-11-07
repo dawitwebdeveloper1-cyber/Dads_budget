@@ -1,4 +1,4 @@
-/* One main colour (deep teal), green for money up, red for money down.
+/* One main colour (navy), green for money up, red for money down.
    Big text and big buttons, built for a phone first. */
 
 :root {
@@ -7,8 +7,8 @@
   --text: #17201c;
   --muted: #5b6863;
   --line: #e2e6e3;
-  --brand: #17616f;
-  --brand-soft: #e3f0f1;
+  --brand: #1a3263;
+  --brand-soft: #e1e7f2;
   --on-brand: #ffffff;
   --up: #17803d;
   --up-soft: #e6f4ea;
@@ -29,9 +29,9 @@
     --text: #edf2ef;
     --muted: #a3b1aa;
     --line: #2b3430;
-    --brand: #5cc0cf;
-    --brand-soft: #1b3236;
-    --on-brand: #06262b;
+    --brand: #8aa8e6;
+    --brand-soft: #18223a;
+    --on-brand: #0a1430;
     --up: #4fd17e;
     --up-soft: #173222;
     --down: #ff7a6e;
@@ -250,7 +250,7 @@ button { cursor: pointer; }
   bottom: calc(var(--tabbar) + 18px + env(safe-area-inset-bottom));
   width: 72px; height: 72px; border-radius: 50%;
   border: 0; background: var(--brand); color: var(--on-brand);
-  box-shadow: 0 6px 18px rgba(23, 97, 111, .35);
+  box-shadow: 0 6px 18px rgba(26, 50, 99, .4);
   display: grid; place-items: center;
 }
 .fab svg { width: 36px; height: 36px; }
