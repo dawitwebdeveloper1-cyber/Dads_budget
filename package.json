@@ -1,0 +1,12 @@
+{
+  "name": "dads-budget",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A simple, offline budgeting app for iPhone home screens.",
+  "scripts": {
+    "test": "node --test \"tests/*.test.js\"",
+    "start": "node scripts/serve.mjs",
+    "icons": "node scripts/make-icons.mjs"
+  }
+}

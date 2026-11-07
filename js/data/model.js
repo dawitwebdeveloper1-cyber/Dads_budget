@@ -1,0 +1,256 @@
+// The shape of the saved data and every change that can be made to it.
+// These functions never change the data in place: they return a new copy.
+// That keeps them easy to test (and makes "Undo" simple in Stage 3).
+
+import { OTHER_CATEGORY_ID, normalizeName, trackingStartDay } from '../maths/budget.js';
+import { FREQUENCIES, occurrences } from '../maths/schedule.js';
+import {
+  dayNumber, ymd, monthKey, monthStartDay, monthEndDay, isoDate, isValidDate, parseMonthKey,
+} from '../maths/dates.js';
+import { MAX_CENTS } from '../maths/money.js';
+
+export const DATA_VERSION = 1;
+
+export const DEFAULT_CATEGORIES = [
+  { id: 'cat-housing', name: 'Housing' },
+  { id: 'cat-food', name: 'Food' },
+  { id: 'cat-gas', name: 'Gas' },
+  { id: 'cat-bills', name: 'Bills' },
+  { id: 'cat-kids', name: 'Kids' },
+  { id: OTHER_CATEGORY_ID, name: 'Other' },
+];
+
+export function newState() {
+  return {
+    version: DATA_VERSION,
+    startMonth: null,
+    onboarded: false,
+    entries: [],
+    categories: DEFAULT_CATEGORIES.map((c) => ({ ...c })),
+    folders: [],
+    settings: {},
+  };
+}
+
+export function makeId(prefix = 'e') {
+  const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix}-${random}`;
+}
+
+// ------------------------------------------------------------ checking data
+
+/** Problems with one entry, in plain words. Empty list means it's fine. */
+export function entryProblems(state, e) {
+  const problems = [];
+  if (e.kind !== 'in' && e.kind !== 'out') problems.push('Pick money in or money out.');
+  if (!Number.isSafeInteger(e.amountCents) || e.amountCents <= 0 || e.amountCents > MAX_CENTS) problems.push('The amount isn\'t right.');
+  if (!normalizeName(e.name)) problems.push('Please give it a name.');
+  if (!FREQUENCIES[e.freq]) problems.push('Pick how often.');
+  if (!isValidDate(e.startDate)) problems.push('Please pick a date.');
+  if (e.tag !== 'personal' && e.tag !== 'business') problems.push('Pick personal or business.');
+  if (e.kind === 'out') {
+    if (e.folderId && !state.folders.some((f) => f.id === e.folderId)) problems.push('That folder no longer exists.');
+    if (!e.folderId && !state.categories.some((c) => c.id === e.categoryId)) problems.push('Pick a category.');
+  }
+  return problems;
+}
+
+/**
+ * One-time and changes-each-time entries can't be dated before the month he
+ * started using the app, because those months aren't counted anywhere.
+ */
+export function dateTooEarly(state, draft, todayISO) {
+  if (FREQUENCIES[draft.freq]?.recurring) return false;
+  const startDay = trackingStartDay(state) ?? firstOfMonth(todayISO);
+  return dayNumber(draft.startDate) < startDay;
+}
+
+function firstOfMonth(iso) {
+  const { y, m } = ymd(dayNumber(iso));
+  return monthStartDay(y, m);
+}
+
+function cleanEntry(draft) {
+  const e = {
+    id: draft.id,
+    kind: draft.kind,
+    amountCents: draft.amountCents,
+    name: String(draft.name).trim().replace(/\s+/g, ' '),
+    categoryId: draft.kind === 'out' && !draft.folderId ? draft.categoryId : null,
+    folderId: draft.kind === 'out' ? (draft.folderId || null) : null,
+    freq: draft.freq,
+    startDate: draft.startDate,
+    tag: draft.tag ?? 'personal',
+    createdAt: draft.createdAt,
+  };
+  if (draft.fromDate) e.fromDate = draft.fromDate;
+  if (draft.endDate) e.endDate = draft.endDate;
+  return e;
+}
+
+// ------------------------------------------------------------ entries
+
+export function addEntry(state, draft, todayISO, id = makeId()) {
+  const entry = cleanEntry({ ...draft, id, createdAt: draft.createdAt ?? todayISO });
+  const problems = entryProblems(state, entry);
+  if (problems.length) throw new Error(problems.join(' '));
+  const today = ymd(dayNumber(todayISO));
+  return {
+    ...state,
+    startMonth: state.startMonth ?? monthKey(today.y, today.m),
+    entries: [...state.entries, entry],
+  };
+}
+
+const SCHEDULE_FIELDS = ['amountCents', 'freq', 'startDate', 'kind'];
+
+/**
+ * Would this edit change past months? True when a repeating entry already
+ * counted in earlier months and the amount, how often or date is changing.
+ * In that case we ask: "Did it change from this month, or fix a mistake?"
+ */
+export function editAffectsPast(state, id, changes, todayISO) {
+  const entry = state.entries.find((e) => e.id === id);
+  if (!entry || !FREQUENCIES[entry.freq].recurring) return false;
+  if (!SCHEDULE_FIELDS.some((f) => f in changes && changes[f] !== entry[f])) return false;
+  const startDay = trackingStartDay(state);
+  if (startDay === null) return false;
+  const { y, m } = ymd(dayNumber(todayISO));
+  const thisMonthStart = monthStartDay(y, m);
+  if (entry.endDate && dayNumber(entry.endDate) < thisMonthStart) return false;
+  return occurrences(entry, startDay, thisMonthStart - 1).length > 0;
+}
+
+/**
+ * Save an edit.
+ * mode 'everywhere': fix the entry in all months (for typos).
+ * mode 'fromThisMonth': earlier months keep the old version; the new version
+ *   counts from the 1st of this month on.
+ */
+export function editEntry(state, id, changes, todayISO, mode = 'everywhere', newId = makeId()) {
+  const old = state.entries.find((e) => e.id === id);
+  if (!old) throw new Error('That entry no longer exists.');
+  const updated = cleanEntry({ ...old, ...changes, id: old.id, createdAt: old.createdAt });
+  const problems = entryProblems(state, updated);
+  if (problems.length) throw new Error(problems.join(' '));
+
+  if (mode !== 'fromThisMonth') {
+    return { ...state, entries: state.entries.map((e) => (e.id === id ? updated : e)) };
+  }
+  const { y, m } = ymd(dayNumber(todayISO));
+  const thisMonthStart = monthStartDay(y, m);
+  const ended = { ...old, endDate: isoDate(thisMonthStart - 1) };
+  const continued = { ...updated, id: newId, fromDate: isoDate(thisMonthStart), createdAt: todayISO };
+  if (old.endDate) continued.endDate = old.endDate;
+  return {
+    ...state,
+    entries: state.entries.flatMap((e) => (e.id === id ? [ended, continued] : [e])),
+  };
+}
+
+/** Stop a repeating entry after this month. Earlier months keep it. */
+export function stopEntry(state, id, todayISO) {
+  const { y, m } = ymd(dayNumber(todayISO));
+  const endDate = isoDate(monthEndDay(y, m));
+  return {
+    ...state,
+    entries: state.entries.map((e) => (e.id === id ? { ...e, endDate } : e)),
+  };
+}
+
+export function deleteEntry(state, id) {
+  return { ...state, entries: state.entries.filter((e) => e.id !== id) };
+}
+
+/** Has this repeating entry already counted in an earlier month? */
+export function hasPastMonths(state, entry, todayISO) {
+  const startDay = trackingStartDay(state);
+  if (startDay === null) return false;
+  const { y, m } = ymd(dayNumber(todayISO));
+  return occurrences(entry, startDay, monthStartDay(y, m) - 1).length > 0;
+}
+
+// ------------------------------------------------------------ categories and folders
+
+function checkNewName(list, name, exceptId, what) {
+  const clean = String(name ?? '').trim().replace(/\s+/g, ' ');
+  if (!clean) throw new Error(`Please type a name for the ${what}.`);
+  if (clean.length > 40) throw new Error('That name is a bit long. Please keep it under 40 letters.');
+  if (list.some((x) => x.id !== exceptId && normalizeName(x.name) === normalizeName(clean))) {
+    throw new Error(`There's already a ${what} called "${clean}".`);
+  }
+  return clean;
+}
+
+export function addCategory(state, name, id = makeId('cat')) {
+  const clean = checkNewName(state.categories, name, null, 'category');
+  return { ...state, categories: [...state.categories, { id, name: clean }] };
+}
+
+export function renameCategory(state, id, name) {
+  const clean = checkNewName(state.categories, name, id, 'category');
+  return { ...state, categories: state.categories.map((c) => (c.id === id ? { ...c, name: clean } : c)) };
+}
+
+/** Delete a category. Anything in it moves to "Other", so no money disappears. */
+export function deleteCategory(state, id) {
+  if (id === OTHER_CATEGORY_ID) throw new Error('"Other" can\'t be deleted. It catches anything without a category.');
+  return {
+    ...state,
+    categories: state.categories.filter((c) => c.id !== id),
+    entries: state.entries.map((e) => (e.categoryId === id ? { ...e, categoryId: OTHER_CATEGORY_ID } : e)),
+  };
+}
+
+export function addFolder(state, name, id = makeId('fold')) {
+  const clean = checkNewName(state.folders, name, null, 'folder');
+  return { ...state, folders: [...state.folders, { id, name: clean }] };
+}
+
+export function renameFolder(state, id, name) {
+  const clean = checkNewName(state.folders, name, id, 'folder');
+  return { ...state, folders: state.folders.map((f) => (f.id === id ? { ...f, name: clean } : f)) };
+}
+
+/** Delete a folder. Anything in it moves to "Other", so no money disappears. */
+export function deleteFolder(state, id) {
+  return {
+    ...state,
+    folders: state.folders.filter((f) => f.id !== id),
+    entries: state.entries.map((e) => (e.folderId === id ? { ...e, folderId: null, categoryId: OTHER_CATEGORY_ID } : e)),
+  };
+}
+
+export function countIn(state, { categoryId, folderId }) {
+  return state.entries.filter((e) => (folderId ? e.folderId === folderId : !e.folderId && e.kind === 'out' && e.categoryId === categoryId)).length;
+}
+
+// ------------------------------------------------------------ loading saved data
+
+/**
+ * Check saved data before trusting it. Returns a clean state, or throws with
+ * a plain-words reason. Used on start-up (and for backups in Stage 3).
+ */
+export function loadState(raw) {
+  if (!raw || typeof raw !== 'object') throw new Error('This doesn\'t look like budget data.');
+  if (raw.version !== DATA_VERSION) throw new Error('This data is from a different version of the app.');
+  const state = {
+    ...newState(),
+    startMonth: raw.startMonth && parseMonthKey(raw.startMonth) ? raw.startMonth : null,
+    onboarded: Boolean(raw.onboarded),
+    categories: Array.isArray(raw.categories) ? raw.categories.filter((c) => c && c.id && c.name) : newState().categories,
+    folders: Array.isArray(raw.folders) ? raw.folders.filter((f) => f && f.id && f.name) : [],
+    settings: raw.settings && typeof raw.settings === 'object' ? raw.settings : {},
+    entries: [],
+  };
+  if (!state.categories.some((c) => c.id === OTHER_CATEGORY_ID)) {
+    state.categories.push({ id: OTHER_CATEGORY_ID, name: 'Other' });
+  }
+  for (const e of Array.isArray(raw.entries) ? raw.entries : []) {
+    const problems = entryProblems(state, e);
+    if (problems.length) throw new Error(`An entry called "${e?.name}" is damaged: ${problems.join(' ')}`);
+    state.entries.push(cleanEntry(e));
+  }
+  if (state.entries.length && !state.startMonth) throw new Error('The start month is missing.');
+  return state;
+}
