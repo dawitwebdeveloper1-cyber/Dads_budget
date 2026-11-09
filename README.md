@@ -19,6 +19,24 @@ phone, and installs on the iPhone home screen like a normal app.
   or PDF, with personal-only or business-only options; backup export/import
   with a weekly reminder.
 
+## Mileage
+
+- **Set up once:** Mileage tab → **+ Add a truck**. Give each truck a name and
+  pick the folder that holds that truck's fuel. **Keep only that truck's fuel
+  in its folder**, because cost per km = everything in the folder ÷ the truck's km.
+  Fuel is added the usual way: + → Money out → pick the truck's folder.
+- **Each day:** on the Mileage tab, tap **+**. The start odometer fills in from
+  where that truck ended last time, so usually he only types the end reading.
+  Business trips need "where" and "what for" (the CRA logbook asks for them).
+- **Checks before saving:** end below start, a future date, a start reading
+  that doesn't match where the truck ended last time ("Missing a trip?"),
+  a day over 1,500 km, and the same trip entered twice.
+- **Totals:** week (Monday–Sunday), 2 weeks (every other Monday, starting
+  Jan 5, 2026; shift it by a week under Mileage → Trucks), month and year.
+  Each total shows business km, personal km, business use %, and fuel cost per km.
+- **Logbook for taxes:** a year or month, for one truck or both, as a
+  spreadsheet or PDF, with odometer readings at the first and last trip.
+
 ## Backups and changing phones
 
 - **Making a backup:** More → **Export backup**. On iPhone the Share sheet
@@ -160,10 +178,11 @@ icon deletes his data.** Keep a backup (More → Export backup).
 4. On his phone, open the app once with internet, close it fully (swipe it
    away), and open it again.
 
-## Adding the Mileage tab later
+## Adding another tab later
 
-1. Make `js/screens/mileage.js` the same way as the other screens: an object
-   with `id`, `label`, `icon` and a `render(ctx)` function.
+1. Make `js/screens/<name>.js` the same way as the other screens: an object
+   with `id`, `label`, `icon` and a `render(ctx)` function (and `onAdd(ctx)`
+   if the + button should do something special on it, like Mileage does).
 2. Add it to the list in `js/tabs.js`.
 3. Add the new file to the list in `sw.js` (a test checks you didn't forget).
 

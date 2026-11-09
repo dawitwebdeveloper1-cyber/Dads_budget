@@ -575,6 +575,28 @@ body.locked #app, body.privacy #app { visibility: hidden; }
   #print-root .print-foot { margin-top: 14pt; color: #555; font-size: 9pt; }
 }
 
+/* ---------- mileage */
+
+.field.first { margin-top: 0; }
+.odo-input { font-size: 30px; font-weight: 800; min-height: 64px; font-variant-numeric: tabular-nums; }
+.km-line { margin: 8px 2px 0; font-size: 22px; font-weight: 800; color: var(--brand); }
+.km-line:empty { display: none; }
+.period-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 14px; }
+.period-label { flex: 1; display: flex; flex-direction: column; align-items: center; font-weight: 700; font-size: 19px; text-align: center; }
+.period-label small { font-size: 15px; font-weight: 600; color: var(--muted); }
+.nav-btn {
+  width: 52px; height: 52px; flex: none;
+  border: 1px solid var(--line); border-radius: 50%;
+  background: var(--card); color: var(--brand); font-size: 30px; line-height: 1;
+}
+.nav-btn:disabled { opacity: .35; }
+.km-split { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; font-weight: 700; font-size: 18px; font-variant-numeric: tabular-nums; }
+.km-split span { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.km-split small { font-size: 14px; font-weight: 600; color: var(--muted); }
+.cpk-row { align-items: flex-start; }
+.cpk-row .how { margin-top: 6px; }
+.tabbar .tab { font-size: 13px; }
+
 [hidden] { display: none !important; }
 
 @media (prefers-reduced-motion: reduce) {

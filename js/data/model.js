@@ -5,9 +5,10 @@
 import { OTHER_CATEGORY_ID, normalizeName, trackingStartDay } from '../maths/budget.js';
 import { FREQUENCIES, occurrences } from '../maths/schedule.js';
 import {
-  dayNumber, ymd, monthKey, monthStartDay, monthEndDay, isoDate, isValidDate, parseMonthKey,
+  dayNumber, ymd, monthKey, monthStartDay, monthEndDay, isoDate, isValidDate, parseMonthKey, weekday,
 } from '../maths/dates.js';
 import { MAX_CENTS } from '../maths/money.js';
+import { DEFAULT_ANCHOR } from '../maths/mileage.js';
 
 export const DATA_VERSION = 1;
 
@@ -31,6 +32,7 @@ export function newState() {
     paid: {},
     limits: {},
     goals: [],
+    mileage: { trucks: [], trips: [], anchor: DEFAULT_ANCHOR },
     settings: {},
   };
 }
@@ -253,11 +255,113 @@ export function renameFolder(state, id, name) {
 
 /** Delete a folder. Anything in it moves to "Other", so no money disappears. */
 export function deleteFolder(state, id) {
+  const mileage = state.mileage ?? newState().mileage;
   return {
     ...withoutLimit(state, `f:${id}`),
     folders: state.folders.filter((f) => f.id !== id),
     entries: state.entries.map((e) => (e.folderId === id ? { ...e, folderId: null, categoryId: OTHER_CATEGORY_ID } : e)),
+    // A truck whose fuel folder is deleted just stops showing cost per km until a new one is picked.
+    mileage: { ...mileage, trucks: mileage.trucks.map((t) => (t.fuelFolderId === id ? { ...t, fuelFolderId: null } : t)) },
   };
+}
+
+// ------------------------------------------------------------ mileage: trucks
+
+const milesOf = (state) => state.mileage ?? newState().mileage;
+
+function checkTruckName(state, name, exceptId) {
+  return checkNewName(milesOf(state).trucks, name, exceptId, 'truck');
+}
+
+function checkFuelFolder(state, folderId) {
+  if (folderId && !state.folders.some((f) => f.id === folderId)) throw new Error('That folder no longer exists.');
+  return folderId || null;
+}
+
+export function addTruck(state, { name, fuelFolderId = null }, id = makeId('truck')) {
+  const m = milesOf(state);
+  const truck = { id, name: checkTruckName(state, name, null), fuelFolderId: checkFuelFolder(state, fuelFolderId) };
+  return { ...state, mileage: { ...m, trucks: [...m.trucks, truck] } };
+}
+
+export function editTruck(state, id, { name, fuelFolderId }) {
+  const m = milesOf(state);
+  if (!m.trucks.some((t) => t.id === id)) throw new Error('That truck no longer exists.');
+  const clean = checkTruckName(state, name, id);
+  const folder = checkFuelFolder(state, fuelFolderId);
+  return { ...state, mileage: { ...m, trucks: m.trucks.map((t) => (t.id === id ? { ...t, name: clean, fuelFolderId: folder } : t)) } };
+}
+
+/** Delete a truck and all of its trips. */
+export function deleteTruck(state, id) {
+  const m = milesOf(state);
+  return { ...state, mileage: { ...m, trucks: m.trucks.filter((t) => t.id !== id), trips: m.trips.filter((t) => t.truckId !== id) } };
+}
+
+/** 2-week mileage periods start on this Monday (and every other Monday from it). */
+export function setMileageAnchor(state, iso) {
+  if (!isValidDate(iso) || weekday(dayNumber(iso)) !== 1) throw new Error('2-week periods have to start on a Monday.');
+  return { ...state, mileage: { ...milesOf(state), anchor: iso } };
+}
+
+// ------------------------------------------------------------ mileage: trips
+
+function cleanTrip(t) {
+  const text = (v) => String(v ?? '').trim().replace(/\s+/g, ' ');
+  return {
+    id: t.id,
+    truckId: t.truckId,
+    date: t.date,
+    startKm: t.startKm,
+    endKm: t.endKm,
+    where: text(t.where),
+    purpose: text(t.purpose),
+    tag: t.tag,
+    createdAt: t.createdAt ?? null,
+  };
+}
+
+/** Problems with one trip, in plain words. Empty list means it's fine. */
+export function tripProblems(state, t, todayISO = null) {
+  const problems = [];
+  const odo = (n) => Number.isSafeInteger(n) && n >= 0 && n <= 9_999_999;
+  if (!milesOf(state).trucks.some((tr) => tr.id === t?.truckId)) problems.push('Pick a truck.');
+  if (!isValidDate(t?.date)) problems.push('Please pick a date.');
+  else if (todayISO && t.date > todayISO) problems.push('The date can\'t be in the future.');
+  if (!odo(t?.startKm)) problems.push('Please check the start reading.');
+  if (!odo(t?.endKm)) problems.push('Please check the end reading.');
+  if (odo(t?.startKm) && odo(t?.endKm) && t.endKm < t.startKm) problems.push('The end reading is lower than the start reading.');
+  if (t?.tag !== 'business' && t?.tag !== 'personal') problems.push('Pick business or personal.');
+  if (String(t?.where ?? '').length > 80 || String(t?.purpose ?? '').length > 80) problems.push('Please keep the notes under 80 letters.');
+  return problems;
+}
+
+/** The CRA logbook asks where and why for business trips. */
+export function tripNeedsNotes(t) {
+  return t.tag === 'business' && (!String(t.where ?? '').trim() || !String(t.purpose ?? '').trim());
+}
+
+export function addTrip(state, draft, todayISO, id = makeId('trip')) {
+  const trip = cleanTrip({ ...draft, id, createdAt: todayISO });
+  const problems = tripProblems(state, trip, todayISO);
+  if (problems.length) throw new Error(problems.join(' '));
+  const m = milesOf(state);
+  return { ...state, mileage: { ...m, trips: [...m.trips, trip] } };
+}
+
+export function editTrip(state, id, changes, todayISO) {
+  const m = milesOf(state);
+  const old = m.trips.find((t) => t.id === id);
+  if (!old) throw new Error('That trip no longer exists.');
+  const trip = cleanTrip({ ...old, ...changes, id, createdAt: old.createdAt });
+  const problems = tripProblems(state, trip, todayISO);
+  if (problems.length) throw new Error(problems.join(' '));
+  return { ...state, mileage: { ...m, trips: m.trips.map((t) => (t.id === id ? trip : t)) } };
+}
+
+export function deleteTrip(state, id) {
+  const m = milesOf(state);
+  return { ...state, mileage: { ...m, trips: m.trips.filter((t) => t.id !== id) } };
 }
 
 export function countIn(state, { categoryId, folderId }) {
@@ -397,6 +501,23 @@ export function loadState(raw) {
     } catch (err) {
       throw new Error(`A savings goal called "${g?.name}" is damaged: ${err.message}`);
     }
+  }
+
+  const rawMileage = raw.mileage && typeof raw.mileage === 'object' ? raw.mileage : {};
+  if (isValidDate(rawMileage.anchor) && weekday(dayNumber(rawMileage.anchor)) === 1) state.mileage.anchor = rawMileage.anchor;
+  for (const tr of Array.isArray(rawMileage.trucks) ? rawMileage.trucks : []) {
+    try {
+      const truck = { id: String(tr.id), name: tr.name, fuelFolderId: state.folders.some((f) => f.id === tr.fuelFolderId) ? tr.fuelFolderId : null };
+      truck.name = checkTruckName(state, truck.name, truck.id);
+      state.mileage.trucks.push(truck);
+    } catch (err) {
+      throw new Error(`A truck called "${tr?.name}" is damaged: ${err.message}`);
+    }
+  }
+  for (const t of Array.isArray(rawMileage.trips) ? rawMileage.trips : []) {
+    const problems = tripProblems(state, t);
+    if (problems.length) throw new Error(`A trip on ${t?.date} is damaged: ${problems.join(' ')}`);
+    state.mileage.trips.push(cleanTrip(t));
   }
   return state;
 }

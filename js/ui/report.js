@@ -4,12 +4,50 @@
 import { h } from './dom.js';
 import { money, dateLabel } from './format.js';
 
-export function printReport(report) {
+function printRoot() {
   let root = document.getElementById('print-root');
   if (!root) {
     root = h('div', { id: 'print-root' });
     document.body.append(root);
   }
+  return root;
+}
+
+function printNow() {
+  document.body.classList.add('printing');
+  const done = () => { document.body.classList.remove('printing'); window.removeEventListener('afterprint', done); };
+  window.addEventListener('afterprint', done);
+  window.print();
+}
+
+/** The CRA mileage logbook as a printable page. */
+export function printLogbook(book) {
+  const km = (n) => (n === null ? '' : `${n.toLocaleString('en-CA')} km`);
+  printRoot().replaceChildren(...[
+    h('h1', {}, 'Mileage logbook'),
+    h('p', { class: 'print-sub' }, book.title.replace('Mileage logbook: ', '')),
+    h('table', { class: 'print-rows' },
+      h('thead', {}, h('tr', {}, ['Truck', 'Odometer at first trip', 'Odometer at last trip', 'Total', 'Business', 'Personal', 'Business use'].map((t) => h('th', {}, t)))),
+      h('tbody', {},
+        book.perTruck.map((t) => h('tr', {}, h('td', {}, t.name), h('td', { class: 'num' }, km(t.startKm)), h('td', { class: 'num' }, km(t.endKm)),
+          h('td', { class: 'num' }, km(t.totalKm)), h('td', { class: 'num' }, km(t.businessKm)), h('td', { class: 'num' }, km(t.personalKm)), h('td', { class: 'num' }, t.businessPct))),
+        book.perTruck.length > 1 && h('tr', {}, h('th', {}, 'All'), h('td'), h('td'), h('th', { class: 'num' }, km(book.totalKm)),
+          h('th', { class: 'num' }, km(book.businessKm)), h('th', { class: 'num' }, km(book.personalKm)), h('th', { class: 'num' }, book.businessPct)))),
+    h('h2', {}, 'Every trip'),
+    h('table', { class: 'print-rows' },
+      h('thead', {}, h('tr', {}, ['Date', 'Truck', 'Start', 'End', 'Km', 'Business / personal', 'Where', 'Purpose'].map((t) => h('th', {}, t)))),
+      h('tbody', {}, book.rows.map((r) => h('tr', {},
+        h('td', {}, dateLabel(r.date)), h('td', {}, r.truck),
+        h('td', { class: 'num' }, r.startKm.toLocaleString('en-CA')), h('td', { class: 'num' }, r.endKm.toLocaleString('en-CA')),
+        h('td', { class: 'num' }, r.km.toLocaleString('en-CA')),
+        h('td', {}, r.tag === 'business' ? 'Business' : 'Personal'), h('td', {}, r.where), h('td', {}, r.purpose))))),
+    h('p', { class: 'print-foot' }, `Made with the Budget app. ${book.rows.length} trips.`),
+  ].flat().filter(Boolean));
+  printNow();
+}
+
+export function printReport(report) {
+  const root = printRoot();
   const thisYear = null;
   root.replaceChildren(...[
     h('h1', {}, 'Budget'),
@@ -36,8 +74,5 @@ export function printReport(report) {
         h('td', { class: 'num' }, money(r.cents)))))),
     h('p', { class: 'print-foot' }, `Made with the Budget app. ${report.rows.length} payments.`),
   ].flat().filter(Boolean));
-  document.body.classList.add('printing');
-  const done = () => { document.body.classList.remove('printing'); window.removeEventListener('afterprint', done); };
-  window.addEventListener('afterprint', done);
-  window.print();
+  printNow();
 }

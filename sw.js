@@ -2,7 +2,7 @@
 // listed below. When you change the app, raise VERSION by one so phones pick
 // up the new copy the next time they open it with internet.
 
-const VERSION = 6;
+const VERSION = 7;
 const CACHE = `dads-budget-v${VERSION}`;
 
 const FILES = [
@@ -17,6 +17,7 @@ const FILES = [
   './js/tabs.js',
   './js/data/backup.js',
   './js/data/export.js',
+  './js/data/logbook.js',
   './js/data/model.js',
   './js/data/store.js',
   './js/insights/advice.js',
@@ -28,12 +29,14 @@ const FILES = [
   './js/maths/budget.js',
   './js/maths/checks.js',
   './js/maths/dates.js',
+  './js/maths/mileage.js',
   './js/maths/money.js',
   './js/maths/periods.js',
   './js/maths/schedule.js',
   './js/screens/breakdown.js',
   './js/screens/history.js',
   './js/screens/home.js',
+  './js/screens/mileage.js',
   './js/screens/more.js',
   './js/screens/shared.js',
   './js/screens/tools.js',
@@ -46,6 +49,7 @@ const FILES = [
   './js/ui/lock.js',
   './js/ui/notes.js',
   './js/ui/report.js',
+  './js/ui/trip-form.js',
 ];
 
 self.addEventListener('install', (event) => {

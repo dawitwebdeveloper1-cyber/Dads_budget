@@ -139,13 +139,14 @@ export function openEntryForm(ctx, { entry = null, preset = {} } = {}) {
 
   function fillWhereOptions() {
     const s = ctx.state;
-    whereSelect.replaceChildren(
+    whereSelect.replaceChildren(...[
       h('option', { value: '' }, 'Pick one…'),
       h('optgroup', { label: 'Categories' }, s.categories.map((c) => h('option', { value: `c:${c.id}` }, c.name))),
       s.folders.length > 0 && h('optgroup', { label: 'Folders' }, s.folders.map((f) => h('option', { value: `f:${f.id}` }, `📁 ${f.name}`))),
       h('optgroup', { label: 'Add new' },
         h('option', { value: 'new:cat' }, '+ New category…'),
-        h('option', { value: 'new:folder' }, '+ New folder…')));
+        h('option', { value: 'new:folder' }, '+ New folder…')),
+    ].filter(Boolean));
     whereSelect.value = d.where;
     if (whereSelect.value !== d.where) d.where = '';
   }

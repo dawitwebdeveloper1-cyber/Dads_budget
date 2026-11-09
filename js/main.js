@@ -92,6 +92,7 @@ function render(toTop = false, restore = false) {
   }
   screenEl().replaceChildren(header() ?? '', content);
   document.getElementById('tabs').replaceChildren(tabBar());
+  document.getElementById('fab').setAttribute('aria-label', tab.addLabel ?? 'Add money in or out');
   document.title = stack.length ? `${view.title} · Budget` : 'Budget';
   let y = keep;
   if (toTop) y = 0;
@@ -129,7 +130,12 @@ function onVisibility() {
 async function start() {
   const { loadProblem } = store.init();
   store.subscribe(() => render());
-  document.getElementById('fab').addEventListener('click', () => ctx.openForm());
+  // The + button does what the current tab says (log a trip on Mileage), or adds money.
+  document.getElementById('fab').addEventListener('click', () => {
+    const tab = TABS.find((t) => t.id === ui.tab);
+    if (tab.onAdd) tab.onAdd(ctx);
+    else ctx.openForm();
+  });
   render();
   await lockNow();
   if (loadProblem) {
